@@ -76,11 +76,11 @@ func main() {
 
 	sourceConfigs := config.SourceConfigsFromFlags(source, component, host, port, whitelisted)
 
-	var gceConf config.GceConfig
-	if *project_id != "" && *zone != "" && cluster != "" && instance_id != "" {
+	var gceConf *config.GceConfig
+	if *project_id != "" && *zone != "" && *cluster != "" && *instance_id != "" {
 		glog.Infof("Loading GCE config from flags")
-		gceConf = config.GceConfig{
-			Project:       *project,
+		gceConf = &config.GceConfig{
+			Project:       *project_id,
 			Zone:          *zone,
 			Cluster:       *cluster,
 			Instance:      *instance_id,
