@@ -26,7 +26,6 @@ import (
 
 	"github.com/golang/glog"
 	"golang.org/x/net/context"
-	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	v3 "google.golang.org/api/monitoring/v3"
 
@@ -59,7 +58,11 @@ var (
 		"Namespace name of the pod in which monitored component is running.")
 	omitComponentName = flag.Bool("omit-component-name", true,
 		"If metric name starts with the component name then this substring is removed to keep metric name shorter.")
-	debugPort = flag.Uint("port", 6061, "Port on which debug information is exposed.")
+	debugPort   = flag.Uint("port", 6061, "Port on which debug information is exposed.")
+	project_id  = flag.String("project-id", "", "Stackdriver label project_id")
+	zone        = flag.String("zone", "", "Stackdriver label zone")
+	cluster     = flag.String("cluster", "", "Stackdriver label cluster")
+	instance_id = flag.String("instance-id", "", "Stackdriver label instance_id")
 
 	customMetricsPrefix = "custom.googleapis.com"
 )
@@ -73,13 +76,27 @@ func main() {
 
 	sourceConfigs := config.SourceConfigsFromFlags(source, component, host, port, whitelisted)
 
-	gceConf, err := config.GetGceConfig(*metricsPrefix)
+	var gceConf config.GceConfig
+	if *project_id != "" && *zone != "" && cluster != "" && instance_id != "" {
+		glog.Infof("Loading GCE config from flags")
+		gceConf = config.GceConfig{
+			Project:       *project,
+			Zone:          *zone,
+			Cluster:       *cluster,
+			Instance:      *instance_id,
+			MetricsPrefix: *metricsPrefix,
+		}
+	} else {
+		glog.Infof("Loading GCE config from metadata server")
+		var err error
+		gceConf, err = config.GetGceConfig(*metricsPrefix)
+		if err != nil {
+			glog.Fatalf("Failed to get GCE config: %v", err)
+		}
+	}
 	podConfig := &config.PodConfig{
 		PodId:       *podId,
 		NamespaceId: *namespaceId,
-	}
-	if err != nil {
-		glog.Fatalf("Failed to get GCE config: %v", err)
 	}
 	glog.Infof("GCE config: %+v", gceConf)
 
@@ -88,7 +105,10 @@ func main() {
 		glog.Error(http.ListenAndServe(fmt.Sprintf(":%d", *debugPort), nil))
 	}()
 
-	client := oauth2.NewClient(context.Background(), google.ComputeTokenSource(""))
+	client, err := google.DefaultClient(context.Background())
+	if err != nil {
+		glog.Fatalf("Failed to obtain credentials: %v", err)
+	}
 	stackdriverService, err := v3.New(client)
 	if *apioverride != "" {
 		stackdriverService.BasePath = *apioverride
